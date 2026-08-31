@@ -3,8 +3,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { LogIn } from 'lucide-react'
 
 const Login = () => {
-  const [email, setEmail] = useState('admin@aqualaars.com')
-  const [password, setPassword] = useState('admin123')
+  // ✅ Campos VACÍOS - el usuario debe escribir
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
@@ -38,6 +39,7 @@ const Login = () => {
             </label>
             <input
               type="email"
+              placeholder="usuario@ejemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
@@ -51,6 +53,7 @@ const Login = () => {
             </label>
             <input
               type="password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
