@@ -10,6 +10,7 @@ const Inventory = () => {
   const [exchangeRate, setExchangeRate] = useState(6.96)
   const [newProduct, setNewProduct] = useState({
     nombre: '',
+    categoria: '',
     marca: '',
     origen: '',
     cantidad: 1,
@@ -25,7 +26,22 @@ const Inventory = () => {
 
   // Opciones de origen (países)
   const paises = [
-    'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Estados Unidos', 'México', 'Paraguay', 'Perú', 'Uruguay', 'China', 'Japón', 'Taiwán', 'Italia'
+    'Argentina', 'Bolivia', 'Brasil', 'Chile', 'Estados Unidos', 
+    'México', 'Paraguay', 'Perú', 'Uruguay', 'China', 'Japón', 'Taiwán', 'Italia'
+  ]
+
+  // ✅ Opciones de categorías
+  const categorias = [
+    'Bombas',
+    'Filtros',
+    'Cloradores',
+    'Accesorios',
+    'Productos Químicos',
+    'Iluminación',
+    'Limpieza',
+    'Tuberías',
+    'Válvulas',
+    'Otros'
   ]
 
   useEffect(() => {
@@ -33,7 +49,6 @@ const Inventory = () => {
     fetchExchangeRate()
   }, [])
 
-  // ✅ Cuando cambia la página, buscar productos
   useEffect(() => {
     fetchProducts()
   }, [currentPage])
@@ -41,11 +56,9 @@ const Inventory = () => {
   const fetchProducts = async () => {
     setLoading(true)
     try {
-      // Calcular el rango para la paginación
       const from = (currentPage - 1) * productsPerPage
       const to = from + productsPerPage - 1
 
-      // Obtener productos con paginación
       const { data, error, count } = await supabase
         .from('inventario')
         .select('*', { count: 'exact' })
@@ -64,7 +77,6 @@ const Inventory = () => {
     }
   }
 
-  // ✅ Búsqueda con paginación
   const fetchSearchResults = async (searchTerm) => {
     setLoading(true)
     try {
@@ -73,10 +85,10 @@ const Inventory = () => {
         .select('*', { count: 'exact' })
         .order('nombre')
 
-      // Aplicar filtro de búsqueda
       if (searchTerm.trim()) {
         query = query.or(
           `nombre.ilike.%${searchTerm}%,` +
+          `categoria.ilike.%${searchTerm}%,` +
           `marca.ilike.%${searchTerm}%,` +
           `origen.ilike.%${searchTerm}%`
         )
@@ -99,11 +111,9 @@ const Inventory = () => {
     }
   }
 
-  // ✅ Manejar cambio de página
   const handlePageChange = (newPage) => {
     if (newPage < 1 || newPage > totalPages) return
     setCurrentPage(newPage)
-    // Scroll al inicio de la tabla
     document.querySelector('.inventory-table')?.scrollIntoView({ behavior: 'smooth' })
   }
 
@@ -190,79 +200,76 @@ const Inventory = () => {
   }
 
   const addProduct = async () => {
-  if (!newProduct.nombre.trim()) {
-    alert('Por favor ingrese un nombre para el producto')
-    return
-  }
+    if (!newProduct.nombre.trim()) {
+      alert('Por favor ingrese un nombre para el producto')
+      return
+    }
 
-  const precio_bob = newProduct.precio_usd * exchangeRate
-  
-  try {
-    const { data, error } = await supabase
-      .from('inventario')
-      .insert([{
-        nombre: newProduct.nombre,
-        marca: newProduct.marca || null,
-        origen: newProduct.origen || null,
-        cantidad: newProduct.cantidad,
-        stock_maximo: newProduct.cantidad, // ✅ Agregar esta línea
-        precio_usd: newProduct.precio_usd,
-        precio_bob: precio_bob
-      }])
-      .select()
+    const precio_bob = newProduct.precio_usd * exchangeRate
     
-    if (error) throw error
-    
-    setProducts([...products, data[0]])
-    setNewProduct({ nombre: '', marca: '', origen: '', cantidad: 1, precio_usd: 0.01 })
-    setShowAddForm(false)
-    alert('✅ Producto agregado correctamente')
-  } catch (error) {
-    console.error('Error adding product:', error)
-    alert('❌ Error al agregar el producto')
+    try {
+      const { data, error } = await supabase
+        .from('inventario')
+        .insert([{
+          nombre: newProduct.nombre,
+          categoria: newProduct.categoria || null,
+          marca: newProduct.marca || null,
+          origen: newProduct.origen || null,
+          cantidad: newProduct.cantidad,
+          stock_maximo: newProduct.cantidad,
+          precio_usd: newProduct.precio_usd,
+          precio_bob: precio_bob
+        }])
+        .select()
+      
+      if (error) throw error
+      
+      setProducts([...products, data[0]])
+      setNewProduct({ nombre: '', categoria: '', marca: '', origen: '', cantidad: 1, precio_usd: 0.01 })
+      setShowAddForm(false)
+      alert('✅ Producto agregado correctamente')
+    } catch (error) {
+      console.error('Error adding product:', error)
+      alert('❌ Error al agregar el producto')
+    }
   }
-}
 
   const updateProduct = async (id, updates) => {
-  try {
-    // Obtener el producto actual para saber su stock_maximo
-    const currentProduct = products.find(p => p.id === id)
-    
-    // Si se está actualizando la cantidad, verificar si es mayor que stock_maximo
-    let newStockMaximo = currentProduct?.stock_maximo || currentProduct?.cantidad || 0
-    if (updates.cantidad !== undefined && updates.cantidad > newStockMaximo) {
-      newStockMaximo = updates.cantidad
-    }
+    try {
+      const currentProduct = products.find(p => p.id === id)
+      
+      let newStockMaximo = currentProduct?.stock_maximo || currentProduct?.cantidad || 0
+      if (updates.cantidad !== undefined && updates.cantidad > newStockMaximo) {
+        newStockMaximo = updates.cantidad
+      }
 
-    const updateData = {
-      ...updates,
-      precio_bob: updates.precio_usd * exchangeRate,
-      stock_maximo: newStockMaximo // ✅ Agregar esta línea
-    }
+      const updateData = {
+        ...updates,
+        precio_bob: updates.precio_usd * exchangeRate,
+        stock_maximo: newStockMaximo
+      }
 
-    const { error } = await supabase
-      .from('inventario')
-      .update(updateData)
-      .eq('id', id)
-    
-    if (error) throw error
-    
-    // Actualizar el estado local
-    setProducts(products.map(p => 
-      p.id === id ? { ...p, ...updates, precio_bob: updates.precio_usd * exchangeRate, stock_maximo: newStockMaximo } : p
-    ))
-    
-    // Limpiar edición
-    const newEditing = { ...editingProducts }
-    delete newEditing[id]
-    setEditingProducts(newEditing)
-    
-    alert('✅ Producto actualizado correctamente')
-  } catch (error) {
-    console.error('Error updating product:', error)
-    alert('❌ Error al actualizar el producto')
+      const { error } = await supabase
+        .from('inventario')
+        .update(updateData)
+        .eq('id', id)
+      
+      if (error) throw error
+      
+      setProducts(products.map(p => 
+        p.id === id ? { ...p, ...updates, precio_bob: updates.precio_usd * exchangeRate, stock_maximo: newStockMaximo } : p
+      ))
+      
+      const newEditing = { ...editingProducts }
+      delete newEditing[id]
+      setEditingProducts(newEditing)
+      
+      alert('✅ Producto actualizado correctamente')
+    } catch (error) {
+      console.error('Error updating product:', error)
+      alert('❌ Error al actualizar el producto')
+    }
   }
-}
 
   const deleteProduct = async (id, nombre) => {
     if (!confirm(`¿Estás seguro de eliminar el producto "${nombre}"?`)) return
@@ -293,11 +300,10 @@ const Inventory = () => {
     })
   }
 
-  // ✅ Manejar búsqueda
   const handleSearch = (e) => {
     const value = e.target.value
     setSearchTerm(value)
-    setCurrentPage(1) // Resetear a la primera página al buscar
+    setCurrentPage(1)
     if (value.trim()) {
       fetchSearchResults(value)
     } else {
@@ -307,7 +313,6 @@ const Inventory = () => {
 
   const filteredProducts = products
 
-  // ✅ Generar números de página
   const getPageNumbers = () => {
     const pages = []
     const maxVisible = 5
@@ -322,6 +327,23 @@ const Inventory = () => {
       pages.push(i)
     }
     return pages
+  }
+
+  // ✅ Obtener color de categoría
+  const getCategoriaColor = (categoria) => {
+    const colores = {
+      'Bombas': 'bg-blue-100 text-blue-700',
+      'Filtros': 'bg-green-100 text-green-700',
+      'Cloradores': 'bg-purple-100 text-purple-700',
+      'Accesorios': 'bg-yellow-100 text-yellow-700',
+      'Productos Químicos': 'bg-red-100 text-red-700',
+      'Iluminación': 'bg-indigo-100 text-indigo-700',
+      'Limpieza': 'bg-teal-100 text-teal-700',
+      'Tuberías': 'bg-gray-100 text-gray-700',
+      'Válvulas': 'bg-orange-100 text-orange-700',
+      'Otros': 'bg-slate-100 text-slate-700'
+    }
+    return colores[categoria] || 'bg-gray-100 text-gray-700'
   }
 
   return (
@@ -374,6 +396,7 @@ const Inventory = () => {
           <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 text-gray-800">➕ Agregar Nuevo Producto</h3>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {/* Nombre */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Nombre del producto <span className="text-red-500">*</span>
@@ -386,7 +409,25 @@ const Inventory = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-sm"
               />
             </div>
+
+            {/* ✅ Categoría */}
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                Categoría
+              </label>
+              <select
+                value={newProduct.categoria}
+                onChange={(e) => setNewProduct({ ...newProduct, categoria: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent bg-white text-sm"
+              >
+                <option value="">Seleccionar categoría</option>
+                {categorias.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
             
+            {/* Marca */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Marca
@@ -400,6 +441,7 @@ const Inventory = () => {
               />
             </div>
 
+            {/* Origen */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 País de Origen
@@ -416,6 +458,7 @@ const Inventory = () => {
               </select>
             </div>
             
+            {/* Cantidad */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Cantidad
@@ -430,6 +473,7 @@ const Inventory = () => {
               />
             </div>
 
+            {/* Precio */}
             <div className="sm:col-span-2">
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Precio en USD
@@ -453,6 +497,7 @@ const Inventory = () => {
             </div>
           </div>
 
+          {/* Botones */}
           <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row gap-3 border-t pt-4">
             <button
               onClick={addProduct}
@@ -476,7 +521,7 @@ const Inventory = () => {
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
         <input
           type="text"
-          placeholder="Buscar por nombre, marca o país de origen"
+          placeholder="Buscar por nombre, categoría, marca o país de origen"
           value={searchTerm}
           onChange={handleSearch}
           className="w-full pl-9 sm:pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
@@ -489,12 +534,12 @@ const Inventory = () => {
       ) : filteredProducts.length > 0 ? (
         <>
           <div className="bg-white rounded-xl shadow-md overflow-hidden inventory-table">
-            {/* Tabla Desktop */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Producto</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Categoría</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Marca / Origen</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Cantidad</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Precio USD</th>
@@ -510,6 +555,24 @@ const Inventory = () => {
                     return (
                       <tr key={product.id} className="border-t hover:bg-gray-50">
                         <td className="px-4 py-3 text-sm text-gray-800">{product.nombre}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {isEditing ? (
+                            <select
+                              value={editValues.categoria || ''}
+                              onChange={(e) => handleEditChange(product.id, 'categoria', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm bg-white"
+                            >
+                              <option value="">Sin categoría</option>
+                              {categorias.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className={`px-2 py-0.5 text-xs rounded-full ${getCategoriaColor(product.categoria)}`}>
+                              {product.categoria || 'Sin categoría'}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
                             <div className="flex flex-col gap-1">
@@ -584,6 +647,7 @@ const Inventory = () => {
                                   const updates = {
                                     cantidad: editValues.cantidad,
                                     precio_usd: editValues.precio_usd,
+                                    categoria: editValues.categoria || null,
                                     marca: editValues.marca || null,
                                     origen: editValues.origen || null
                                   }
@@ -632,15 +696,13 @@ const Inventory = () => {
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1 min-w-0 mr-2">
                         <p className="text-sm font-semibold text-gray-800 truncate">{product.nombre}</p>
-                        <div className="text-xs text-gray-500">
-                          {product.marca ? (
-                            <span className="font-medium">{product.marca}</span>
-                          ) : (
-                            <span className="text-gray-400">Sin marca</span>
-                          )}
-                          {product.origen && (
-                            <span className="ml-1">({product.origen})</span>
-                          )}
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <span className={`px-2 py-0.5 text-[10px] rounded-full ${getCategoriaColor(product.categoria)}`}>
+                            {product.categoria || 'Sin categoría'}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {product.marca || 'Sin marca'}
+                          </span>
                         </div>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
@@ -650,6 +712,7 @@ const Inventory = () => {
                               const updates = {
                                 cantidad: editValues.cantidad,
                                 precio_usd: editValues.precio_usd,
+                                categoria: editValues.categoria || null,
                                 marca: editValues.marca || null,
                                 origen: editValues.origen || null
                               }
@@ -718,24 +781,36 @@ const Inventory = () => {
                       </div>
                     </div>
                     {isEditing && (
-                      <div className="mt-2 flex gap-2">
-                        <input
-                          type="text"
-                          value={editValues.marca || ''}
-                          onChange={(e) => handleEditChange(product.id, 'marca', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-                          placeholder="Marca"
-                        />
+                      <div className="mt-2 flex flex-col gap-2">
                         <select
-                          value={editValues.origen || ''}
-                          onChange={(e) => handleEditChange(product.id, 'origen', e.target.value)}
-                          className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm bg-white"
+                          value={editValues.categoria || ''}
+                          onChange={(e) => handleEditChange(product.id, 'categoria', e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm bg-white"
                         >
-                          <option value="">Origen</option>
-                          {paises.map(pais => (
-                            <option key={pais} value={pais}>{pais}</option>
+                          <option value="">Sin categoría</option>
+                          {categorias.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
                           ))}
                         </select>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={editValues.marca || ''}
+                            onChange={(e) => handleEditChange(product.id, 'marca', e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                            placeholder="Marca"
+                          />
+                          <select
+                            value={editValues.origen || ''}
+                            onChange={(e) => handleEditChange(product.id, 'origen', e.target.value)}
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm bg-white"
+                          >
+                            <option value="">Origen</option>
+                            {paises.map(pais => (
+                              <option key={pais} value={pais}>{pais}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -744,7 +819,7 @@ const Inventory = () => {
             </div>
           </div>
 
-          {/* ✅ Paginación */}
+          {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6">
               <div className="text-sm text-gray-600">

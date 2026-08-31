@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../services/supabase'
 import { 
-  Plus, Trash2, Save, DollarSign, QrCode, X, ShoppingBag
+  Plus, Trash2, Save, DollarSign, QrCode, X, ShoppingBag, Search
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { jsPDF } from 'jspdf'
@@ -16,9 +16,54 @@ const Ventas = () => {
   const [quantity, setQuantity] = useState(1)
   const [metodoPago, setMetodoPago] = useState('efectivo')
   const [loading, setLoading] = useState(false)
+  
+  // Estados para el buscador con autocompletado
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [filteredProducts, setFilteredProducts] = useState([])
+  const dropdownRef = useRef(null)
+
+  // ✅ Estados para vendedores y QR
+  const [selectedVendedor, setSelectedVendedor] = useState('')
+  const [showQRModal, setShowQRModal] = useState(false)
+
+  // ✅ Datos de vendedores con sus QR
+  const vendedores = [
+    { 
+      id: 'oliver', 
+      nombre: 'Oliver', 
+      qr: '/qr/qroliver.jpeg'
+    },
+    { 
+      id: 'andres', 
+      nombre: 'Andrés', 
+      qr: '/qr/qrolive.jpeg'
+    },
+    { 
+      id: 'wilson', 
+      nombre: 'Wilson', 
+      qr: '/qr/qroliv.jpeg'
+    },
+    { 
+      id: 'cindy', 
+      nombre: 'Cindy', 
+      qr: '/qr/qroli.jpeg'
+    }
+  ]
 
   useEffect(() => {
     fetchInventory()
+  }, [])
+
+  // Cerrar dropdown al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   const fetchInventory = async () => {
@@ -33,6 +78,40 @@ const Ventas = () => {
     } catch (error) {
       console.error('Error fetching inventory:', error)
     }
+  }
+
+  // Filtrar productos por búsqueda (incluye categoría)
+  const handleSearchChange = (e) => {
+    const value = e.target.value
+    setSearchTerm(value)
+    setSelectedProduct('')
+    
+    if (value.trim() === '') {
+      setFilteredProducts([])
+      setShowDropdown(false)
+      return
+    }
+
+    const filtered = inventoryProducts
+      .filter(p => p.cantidad > 0)
+      .filter(p => 
+        p.nombre.toLowerCase().includes(value.toLowerCase()) ||
+        (p.categoria && p.categoria.toLowerCase().includes(value.toLowerCase())) ||
+        (p.marca && p.marca.toLowerCase().includes(value.toLowerCase())) ||
+        (p.origen && p.origen.toLowerCase().includes(value.toLowerCase()))
+      )
+      .slice(0, 10)
+    
+    setFilteredProducts(filtered)
+    setShowDropdown(filtered.length > 0)
+  }
+
+  // Seleccionar un producto del dropdown
+  const selectProduct = (product) => {
+    setSelectedProduct(product.id)
+    setSearchTerm(`${product.nombre} ${product.marca ? `- ${product.marca}` : ''} ${product.origen ? `(${product.origen})` : ''}`)
+    setShowDropdown(false)
+    document.getElementById('quantity-input')?.focus()
   }
 
   const addToCart = () => {
@@ -68,6 +147,7 @@ const Ventas = () => {
         nombre: product.nombre,
         marca: product.marca,
         origen: product.origen,
+        categoria: product.categoria,
         cantidad: quantity,
         precio_unitario: product.precio_bob || product.precio_usd * 6.96,
         total: quantity * (product.precio_bob || product.precio_usd * 6.96),
@@ -76,8 +156,11 @@ const Ventas = () => {
       setCart([...cart, newItem])
     }
 
+    // Limpiar después de agregar
+    setSearchTerm('')
     setSelectedProduct('')
     setQuantity(1)
+    setShowDropdown(false)
   }
 
   const removeFromCart = (id) => {
@@ -114,146 +197,163 @@ const Ventas = () => {
   }
 
   const saveVenta = async () => {
-  if (!clienteNombre.trim()) {
-    alert('Por favor ingresa el nombre del cliente')
-    return
-  }
-
-  if (cart.length === 0) {
-    alert('Por favor agrega al menos un producto')
-    return
-  }
-
-  const numeroFactura = generateInvoiceNumber()
-
-  // ✅ Asegurar que los datos estén completos
-  const ventaData = {
-    numero_factura: numeroFactura,
-    cliente_nombre: clienteNombre,
-    cliente_ci_nit: clienteCiNit || null, // ✅ null en lugar de ''
-    fecha_venta: new Date().toISOString(),
-    productos: cart.map(p => ({
-      id: p.id,
-      nombre: p.nombre,
-      marca: p.marca || null,
-      origen: p.origen || null,
-      cantidad: p.cantidad,
-      precio_unitario: p.precio_unitario,
-      total: p.total
-    })),
-    subtotal: total,
-    iva: 0,
-    total: total,
-    metodo_pago: metodoPago,
-    estado: 'completada'
-    // ✅ Eliminar 'creado_por' si no existe en la tabla
-  }
-
-  try {
-    setLoading(true)
-    
-    console.log('📝 Guardando venta:', ventaData)
-    
-    const { data, error } = await supabase
-      .from('ventas')
-      .insert([ventaData])
-      .select()
-    
-    if (error) {
-      console.error('❌ Error de Supabase:', error)
-      throw error
+    if (!clienteNombre.trim()) {
+      alert('Por favor ingresa el nombre del cliente')
+      return
     }
-    
-    console.log('✅ Venta guardada:', data)
-    
-    // Actualizar stock de cada producto
-    for (const item of cart) {
-      // ✅ Buscar el producto en inventoryProducts
-      const product = inventoryProducts.find(p => p.id === item.id)
-      if (product) {
-        const newStock = Math.max(0, product.cantidad - item.cantidad)
-        
-        const { error: updateError } = await supabase
-          .from('inventario')
-          .update({ cantidad: newStock })
-          .eq('id', item.id)
-        
-        if (updateError) {
-          console.error('❌ Error actualizando stock:', updateError)
-          throw updateError
+
+    if (cart.length === 0) {
+      alert('Por favor agrega al menos un producto')
+      return
+    }
+
+    // ✅ Validar que se haya seleccionado un vendedor si es QR
+    if (metodoPago === 'qr' && !selectedVendedor) {
+      alert('Por favor selecciona un vendedor para el pago con QR')
+      return
+    }
+
+    const numeroFactura = generateInvoiceNumber()
+
+    const ventaData = {
+      numero_factura: numeroFactura,
+      cliente_nombre: clienteNombre,
+      cliente_ci_nit: clienteCiNit || null,
+      fecha_venta: new Date().toISOString(),
+      productos: cart.map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        marca: p.marca || null,
+        origen: p.origen || null,
+        categoria: p.categoria || null,
+        cantidad: p.cantidad,
+        precio_unitario: p.precio_unitario,
+        total: p.total
+      })),
+      subtotal: total,
+      iva: 0,
+      total: total,
+      metodo_pago: metodoPago,
+      vendedor: metodoPago === 'qr' ? selectedVendedor : null, // ✅ Guardar vendedor
+      estado: 'completada'
+    }
+
+    try {
+      setLoading(true)
+      
+      console.log('📝 Guardando venta:', ventaData)
+      
+      const { data, error } = await supabase
+        .from('ventas')
+        .insert([ventaData])
+        .select()
+      
+      if (error) {
+        console.error('❌ Error de Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ Venta guardada:', data)
+      
+      // Actualizar stock de cada producto
+      for (const item of cart) {
+        const product = inventoryProducts.find(p => p.id === item.id)
+        if (product) {
+          const newStock = Math.max(0, product.cantidad - item.cantidad)
+          
+          const { error: updateError } = await supabase
+            .from('inventario')
+            .update({ cantidad: newStock })
+            .eq('id', item.id)
+          
+          if (updateError) {
+            console.error('❌ Error actualizando stock:', updateError)
+            throw updateError
+          }
         }
       }
-    }
 
-    // ✅ Mostrar mensaje de éxito
-    alert(`✅ Venta registrada exitosamente\nFactura: ${numeroFactura}`)
-    
-    // Generar recibo (si la función existe)
-    if (typeof generateReceipt === 'function') {
+      alert(`✅ Venta registrada exitosamente\nFactura: ${numeroFactura}`)
+      
+      // Generar recibo
       generateReceipt(data[0])
+      
+      // Limpiar carrito
+      setCart([])
+      setClienteNombre('')
+      setClienteCiNit('')
+      setSelectedVendedor('')
+      setShowQRModal(false)
+      
+      // Recargar inventario
+      await fetchInventory()
+      
+    } catch (error) {
+      console.error('❌ Error al guardar venta:', error)
+      alert('❌ Error al guardar la venta: ' + (error.message || 'Error desconocido'))
+    } finally {
+      setLoading(false)
     }
-    
-    // Limpiar carrito
-    setCart([])
-    setClienteNombre('')
-    setClienteCiNit('')
-    
-    // Recargar inventario
-    await fetchInventory()
-    
-  } catch (error) {
-    console.error('❌ Error al guardar venta:', error)
-    alert('❌ Error al guardar la venta: ' + (error.message || 'Error desconocido'))
-  } finally {
-    setLoading(false)
   }
-}
 
   const generateReceipt = (venta) => {
     try {
       const doc = new jsPDF('p', 'mm', 'a4')
       const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
       
-      doc.setFontSize(24)
+      // === ENCABEZADO ===
+      doc.setFontSize(38)
       doc.setTextColor(0, 150, 200)
       doc.setFont('helvetica', 'bold')
-      doc.text('Aqualaars', pageWidth / 2, 25, { align: 'center' })
+      doc.text('Aqualaars', pageWidth / 2, 28, { align: 'center' })
       
       doc.setFontSize(10)
       doc.setTextColor(100, 150, 200)
       doc.setFont('helvetica', 'normal')
-      doc.text('Todo para su piscina', pageWidth / 2, 33, { align: 'center' })
+      doc.text('Todo para su piscina', pageWidth / 2, 35, { align: 'center' })
       
-      doc.setFontSize(16)
+      doc.setFontSize(22)
       doc.setTextColor(0, 0, 0)
       doc.setFont('helvetica', 'bold')
-      doc.text('COMPROBANTE DE VENTA', pageWidth / 2, 45, { align: 'center' })
+      doc.text('COMPROBANTE DE VENTA', pageWidth / 2, 52, { align: 'center' })
       
       doc.setDrawColor(0, 150, 200)
-      doc.setLineWidth(0.5)
-      doc.line(pageWidth / 2 - 60, 50, pageWidth / 2 + 60, 50)
+      doc.setLineWidth(0.8)
+      doc.line(pageWidth / 2 - 60, 59, pageWidth / 2 + 60, 59)
       
-      let yPos = 60
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
+      // === DATOS DEL CLIENTE ===
+      let yPos = 76
+      
+      doc.setFillColor(245, 250, 255)
+      doc.roundedRect(20, yPos - 5, pageWidth - 40, 38, 3, 3, 'F')
+      doc.roundedRect(20, yPos - 5, pageWidth - 40, 38, 3, 3, 'S')
+      
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 150, 200)
+      doc.text('INFORMACIÓN DEL CLIENTE', 25, yPos + 4)
+      
+      doc.setFontSize(9)
       doc.setTextColor(50, 50, 50)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Factura: ${venta.numero_factura}`, 25, yPos + 15)
+      doc.text(`CI/NIT: ${venta.cliente_ci_nit || 'N/A'}`, 25, yPos + 26)
       
-      doc.text(`Factura: ${venta.numero_factura}`, 20, yPos)
-      doc.text(`Fecha: ${format(new Date(venta.fecha_venta), 'dd/MM/yyyy HH:mm')}`, pageWidth - 20, yPos, { align: 'right' })
-      yPos += 8
+      doc.text(`Cliente: ${venta.cliente_nombre}`, pageWidth - 25, yPos + 15, { align: 'right' })
+      doc.text(`Fecha: ${format(new Date(venta.fecha_venta), 'dd/MM/yyyy HH:mm')}`, pageWidth - 25, yPos + 26, { align: 'right' })
       
-      doc.text(`Cliente: ${venta.cliente_nombre}`, 20, yPos)
-      if (venta.cliente_ci_nit) {
-        doc.text(`CI/NIT: ${venta.cliente_ci_nit}`, pageWidth - 20, yPos, { align: 'right' })
+      yPos += 48
+      
+      // === TABLA DE PRODUCTOS ===
+      if (!venta.productos || venta.productos.length === 0) {
+        doc.text('No hay productos en esta venta', pageWidth / 2, yPos + 20, { align: 'center' })
+        doc.save(`Recibo_${venta.numero_factura}.pdf`)
+        return
       }
-      yPos += 8
-      
-      const metodoPagoText = venta.metodo_pago === 'efectivo' ? 'EFECTIVO' : 'QR'
-      doc.text(`Método de pago: ${metodoPagoText}`, 20, yPos)
-      yPos += 12
       
       const tableData = venta.productos.map(p => [
-        p.nombre,
+        p.nombre || 'Producto',
         p.cantidad.toString(),
         `Bs. ${p.precio_unitario.toFixed(2)}`,
         `Bs. ${p.total.toFixed(2)}`
@@ -268,44 +368,75 @@ const Ventas = () => {
           fillColor: [0, 150, 200],
           textColor: [255, 255, 255],
           fontSize: 10,
-          fontStyle: 'bold'
+          fontStyle: 'bold',
+          halign: 'center',
+          cellPadding: 5
         },
-        styles: { fontSize: 9 },
+        styles: { 
+          fontSize: 9,
+          cellPadding: 5,
+          valign: 'middle'
+        },
         columnStyles: {
-          0: { cellWidth: 70 },
+          0: { cellWidth: 70, halign: 'left' },
           1: { cellWidth: 25, halign: 'center' },
           2: { cellWidth: 45, halign: 'right' },
           3: { cellWidth: 45, halign: 'right' }
-        }
+        },
+        alternateRowStyles: {
+          fillColor: [248, 252, 255]
+        },
+        margin: { left: 20, right: 20 },
+        tableWidth: pageWidth - 40
       })
       
-      const finalY = doc.lastAutoTable.finalY + 10
+      // === TOTAL ===
+      const finalY = doc.lastAutoTable.finalY + 12
       
-      doc.setFontSize(14)
+      doc.setDrawColor(0, 150, 200)
+      doc.setLineWidth(0.5)
+      doc.line(pageWidth / 2 - 40, finalY, pageWidth / 2 + 40, finalY)
+      
+      doc.setFontSize(16)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(0, 150, 200)
-      doc.text(`TOTAL: Bs. ${venta.total.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' })
+      doc.text(`TOTAL: Bs. ${venta.total.toFixed(2)}`, pageWidth / 2, finalY + 10, { align: 'center' })
       
-      const footerY = doc.internal.pageSize.getHeight() - 20
+      // === MÉTODO DE PAGO ===
+      const metodoPagoText = venta.metodo_pago === 'efectivo' ? 'EFECTIVO' : 'QR'
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(50, 50, 50)
+      doc.text(`Método de pago: ${metodoPagoText}`, pageWidth / 2, finalY + 22, { align: 'center' })
+      
+      // === PIE DE PÁGINA ===
+      const footerY = pageHeight - 20
+      
       doc.setDrawColor(200, 215, 230)
       doc.setLineWidth(0.3)
-      doc.line(20, footerY - 5, pageWidth - 20, footerY - 5)
+      doc.line(20, footerY - 3, pageWidth - 20, footerY - 3)
       
-      doc.setFontSize(11)
+      doc.setFontSize(13)
       doc.setTextColor(0, 150, 200)
       doc.setFont('helvetica', 'bold')
-      doc.text('Aqualaars', pageWidth / 2, footerY + 5, { align: 'center' })
+      doc.text('Aqualaars', pageWidth / 2, footerY + 6, { align: 'center' })
       
       doc.setFontSize(8)
       doc.setTextColor(150, 180, 200)
       doc.setFont('helvetica', 'normal')
-      doc.text('Todo para su piscina', pageWidth / 2, footerY + 13, { align: 'center' })
-      doc.text('¡Gracias por su compra!', pageWidth / 2, footerY + 21, { align: 'center' })
+      doc.text('Todo para su piscina', pageWidth / 2, footerY + 15, { align: 'center' })
+      doc.text('¡Gracias por su compra!', pageWidth / 2, footerY + 23, { align: 'center' })
+      
+      doc.setFontSize(7)
+      doc.setTextColor(180, 180, 180)
+      doc.text(`ID: ${venta.id.substring(0, 8)}`, pageWidth - 20, footerY + 6, { align: 'right' })
+      doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 20, footerY + 6, { align: 'left' })
       
       doc.save(`Recibo_${venta.numero_factura}.pdf`)
       
     } catch (error) {
-      console.error('Error generando recibo:', error)
+      console.error('❌ Error generando recibo:', error)
+      alert('Error al generar el recibo: ' + error.message)
     }
   }
 
@@ -313,200 +444,310 @@ const Ventas = () => {
     if (cart.length === 0) return
     if (confirm('¿Estás seguro de limpiar el carrito?')) {
       setCart([])
+      setSelectedVendedor('')
+      setShowQRModal(false)
     }
   }
 
-return (
-  <div className="px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
-    {/* Header */}
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-6">
-      <h1 className="text-xl sm:text-2xl font-bold text-gray-800">💰 Nueva Venta</h1>
-    </div>
+  return (
+    <div className="px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 sm:mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800">💰 Nueva Venta</h1>
+      </div>
 
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-      {/* Panel izquierdo */}
-      <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-        {/* Datos del Cliente */}
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Datos del Cliente</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-            <input
-              type="text"
-              placeholder="Nombre del cliente *"
-              value={clienteNombre}
-              onChange={(e) => setClienteNombre(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="CI o NIT"
-              value={clienteCiNit}
-              onChange={(e) => setClienteCiNit(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-            />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        {/* Panel izquierdo */}
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+          {/* Datos del Cliente */}
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Datos del Cliente</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <input
+                type="text"
+                placeholder="Nombre del cliente *"
+                value={clienteNombre}
+                onChange={(e) => setClienteNombre(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="CI o NIT"
+                value={clienteCiNit}
+                onChange={(e) => setClienteCiNit(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Agregar Productos con buscador */}
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Agregar Productos</h3>
+            <div className="flex flex-col gap-3">
+              <div className="relative" ref={dropdownRef}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nombre, categoría, marca u origen..."
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    onFocus={() => {
+                      if (searchTerm.trim() && filteredProducts.length > 0) {
+                        setShowDropdown(true)
+                      }
+                    }}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                  />
+                </div>
+                
+                {showDropdown && filteredProducts.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {filteredProducts.map((product) => (
+                      <button
+                        key={product.id}
+                        onClick={() => selectProduct(product)}
+                        className="w-full px-4 py-2 text-left hover:bg-cyan-50 transition-colors flex justify-between items-center border-b border-gray-100 last:border-0"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{product.nombre}</p>
+                          <p className="text-xs text-gray-500">
+                            {product.categoria && (
+                              <span className="inline-block px-1.5 py-0.5 bg-cyan-100 text-cyan-700 rounded text-[10px] mr-1">
+                                {product.categoria}
+                              </span>
+                            )}
+                            {product.marca || 'Sin marca'} 
+                            {product.origen && ` • ${product.origen}`}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs font-semibold text-cyan-600">Stock: {product.cantidad}</p>
+                          <p className="text-xs text-gray-500">Bs. {(product.precio_bob || product.precio_usd * 6.96).toFixed(2)}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  id="quantity-input"
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  className="w-full sm:w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                  min="1"
+                />
+                <button
+                  onClick={addToCart}
+                  disabled={!selectedProduct}
+                  className={`flex-1 px-4 py-2 rounded-lg transition duration-300 flex items-center justify-center gap-2 text-sm ${
+                    selectedProduct 
+                      ? 'bg-cyan-600 text-white hover:bg-cyan-700' 
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <Plus size={18} />
+                  Agregar al Carrito
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Agregar Productos */}
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Agregar Productos</h3>
-          <div className="flex flex-col gap-3">
-            <select
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-            >
-              <option value="">Selecciona un producto</option>
-              {inventoryProducts
-                .filter(p => p.cantidad > 0)
-                .map(p => {
-                  let label = p.nombre
-                  if (p.marca) label += ` - ${p.marca}`
-                  if (p.origen) label += ` (${p.origen})`
-                  label += ` (Stock: ${p.cantidad})`
-                  return (
-                    <option key={p.id} value={p.id}>
-                      {label}
-                    </option>
-                  )
-                })}
-            </select>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                className="w-full sm:w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
-                min="1"
-              />
+        {/* Panel derecho - Carrito */}
+        <div className="lg:col-span-1">
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md sticky top-4">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
+              🛒 Carrito
+              <span className="text-xs sm:text-sm text-gray-500 ml-auto">
+                {cart.length} {cart.length === 1 ? 'producto' : 'productos'}
+              </span>
+            </h3>
+
+            {cart.length === 0 ? (
+              <div className="text-center py-6 sm:py-8 text-gray-500">
+                <ShoppingBag className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">No hay productos en el carrito</p>
+              </div>
+            ) : (
+              <>
+                <div className="max-h-60 sm:max-h-80 overflow-y-auto space-y-2 mb-4 pr-1">
+                  {cart.map((item) => (
+                    <div key={item.id} className="bg-gray-50 p-3 rounded-lg border">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0 mr-2">
+                          <p className="font-medium text-sm truncate">{item.nombre}</p>
+                          {item.marca && (
+                            <p className="text-xs text-gray-500 truncate">
+                              {item.marca} {item.origen && `(${item.origen})`}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-400">Stock: {item.stock_actual}</p>
+                        </div>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="text-red-500 hover:text-red-700 flex-shrink-0"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <input
+                          type="number"
+                          value={item.cantidad}
+                          onChange={(e) => updateCartQuantity(item.id, parseInt(e.target.value) || 1)}
+                          className="w-14 text-center px-1 py-1 border border-gray-300 rounded text-sm"
+                          min="1"
+                        />
+                        <span className="text-xs sm:text-sm text-gray-600">x Bs. {item.precio_unitario.toFixed(2)}</span>
+                        <span className="text-xs sm:text-sm font-bold ml-auto">Bs. {item.total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t pt-3 sm:pt-4">
+                  <div className="flex justify-between text-base sm:text-lg font-bold text-cyan-600">
+                    <span>Total:</span>
+                    <span>Bs. {total.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 sm:mt-4">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                    Método de Pago
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        setMetodoPago('efectivo')
+                        setSelectedVendedor('')
+                        setShowQRModal(false)
+                      }}
+                      className={`p-2 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-1 ${
+                        metodoPago === 'efectivo'
+                          ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <DollarSign size={16} />
+                      Efectivo
+                    </button>
+                    <button
+                      onClick={() => setMetodoPago('qr')}
+                      className={`p-2 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-1 ${
+                        metodoPago === 'qr'
+                          ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <QrCode size={16} />
+                      QR
+                    </button>
+                  </div>
+                </div>
+
+                {/* ✅ Selector de Vendedor (solo para QR) */}
+                {metodoPago === 'qr' && (
+                  <div className="mt-3">
+                    <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                      Seleccionar Vendedor
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {vendedores.map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => {
+                            setSelectedVendedor(v.id)
+                            setShowQRModal(true)
+                          }}
+                          className={`p-2 rounded-lg border text-xs sm:text-sm font-medium transition-all ${
+                            selectedVendedor === v.id
+                              ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {v.nombre}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedVendedor && (
+                      <p className="text-xs text-green-600 mt-1">
+                        ✅ QR de {vendedores.find(v => v.id === selectedVendedor)?.nombre} seleccionado
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-4">
+                  <button
+                    onClick={clearCart}
+                    className="w-full sm:flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition duration-300 text-sm"
+                  >
+                    Limpiar
+                  </button>
+                  <button
+                    onClick={saveVenta}
+                    disabled={cart.length === 0 || !clienteNombre.trim() || loading || (metodoPago === 'qr' && !selectedVendedor)}
+                    className="w-full sm:flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    <Save size={18} />
+                    {loading ? 'Procesando...' : 'Registrar'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ✅ Modal para mostrar el QR */}
+      {showQRModal && selectedVendedor && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-gray-800">
+                QR - {vendedores.find(v => v.id === selectedVendedor)?.nombre}
+              </h3>
               <button
-                onClick={addToCart}
-                className="flex-1 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition duration-300 flex items-center justify-center gap-2 text-sm"
+                onClick={() => {
+                  setShowQRModal(false)
+                  setSelectedVendedor('')
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <Plus size={18} />
-                Agregar al Carrito
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <div className="bg-white p-4 rounded-xl border-2 border-cyan-100">
+                <img
+                  src={vendedores.find(v => v.id === selectedVendedor)?.qr}
+                  alt={`QR de ${vendedores.find(v => v.id === selectedVendedor)?.nombre}`}
+                  className="w-64 h-64 object-contain"
+                  onError={(e) => {
+                    e.target.src = '/qrs/default.png'
+                  }}
+                />
+              </div>
+              <p className="text-sm text-gray-600 mt-3">Escanea el código QR para pagar</p>
+              <p className="text-xs text-gray-400 mt-1">Total: Bs. {total.toFixed(2)}</p>
+              <button
+                onClick={() => setShowQRModal(false)}
+                className="mt-4 px-6 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition duration-300 text-sm"
+              >
+                Cerrar
               </button>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Panel derecho - Carrito */}
-      <div className="lg:col-span-1">
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md sticky top-4">
-          <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center gap-2">
-            🛒 Carrito
-            <span className="text-xs sm:text-sm text-gray-500 ml-auto">
-              {cart.length} {cart.length === 1 ? 'producto' : 'productos'}
-            </span>
-          </h3>
-
-          {cart.length === 0 ? (
-            <div className="text-center py-6 sm:py-8 text-gray-500">
-              <ShoppingBag className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 text-gray-300" />
-              <p className="text-sm">No hay productos en el carrito</p>
-            </div>
-          ) : (
-            <>
-              <div className="max-h-60 sm:max-h-80 overflow-y-auto space-y-2 mb-4 pr-1">
-                {cart.map((item) => (
-                  <div key={item.id} className="bg-gray-50 p-3 rounded-lg border">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0 mr-2">
-                        <p className="font-medium text-sm truncate">{item.nombre}</p>
-                        {item.marca && (
-                          <p className="text-xs text-gray-500 truncate">
-                            {item.marca} {item.origen && `(${item.origen})`}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-400">Stock: {item.stock_actual}</p>
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-red-500 hover:text-red-700 flex-shrink-0"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <input
-                        type="number"
-                        value={item.cantidad}
-                        onChange={(e) => updateCartQuantity(item.id, parseInt(e.target.value) || 1)}
-                        className="w-14 text-center px-1 py-1 border border-gray-300 rounded text-sm"
-                        min="1"
-                      />
-                      <span className="text-xs sm:text-sm text-gray-600">
-                        x Bs. {item.precio_unitario.toFixed(2)}
-                      </span>
-                      <span className="text-xs sm:text-sm font-bold ml-auto">
-                        Bs. {item.total.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="border-t pt-3 sm:pt-4">
-                <div className="flex justify-between text-base sm:text-lg font-bold text-cyan-600">
-                  <span>Total:</span>
-                  <span>Bs. {total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              <div className="mt-3 sm:mt-4">
-                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
-                  Método de Pago
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setMetodoPago('efectivo')}
-                    className={`p-2 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-1 ${
-                      metodoPago === 'efectivo'
-                        ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                        : 'border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <DollarSign size={16} />
-                    Efectivo
-                  </button>
-                  <button
-                    onClick={() => setMetodoPago('qr')}
-                    className={`p-2 rounded-lg border text-xs sm:text-sm flex items-center justify-center gap-1 ${
-                      metodoPago === 'qr'
-                        ? 'border-cyan-500 bg-cyan-50 text-cyan-700'
-                        : 'border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <QrCode size={16} />
-                    QR
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-4">
-                <button
-                  onClick={clearCart}
-                  className="w-full sm:flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition duration-300 text-sm"
-                >
-                  Limpiar
-                </button>
-                <button
-                  onClick={saveVenta}
-                  disabled={cart.length === 0 || !clienteNombre.trim() || loading}
-                  className="w-full sm:flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  <Save size={18} />
-                  {loading ? 'Procesando...' : 'Registrar'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+      )}
     </div>
-  </div>
-);
+  )
 }
 
 export default Ventas
