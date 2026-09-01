@@ -234,7 +234,6 @@ const Ventas = () => {
       iva: 0,
       total: total,
       metodo_pago: metodoPago,
-      vendedor: metodoPago === 'qr' ? selectedVendedor : null, // ✅ Guardar vendedor
       estado: 'completada'
     }
 
