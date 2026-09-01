@@ -12,7 +12,7 @@ const Home = () => {
   const [lowStockProducts, setLowStockProducts] = useState([])
   const [allProducts, setAllProducts] = useState([])
   const [isSearching, setIsSearching] = useState(false)
-  const [stockThreshold] = useState(20) // Porcentaje para considerar bajo stock
+  const [stockThreshold] = useState(30) // ✅ Cambiado a 30%
 
   useEffect(() => {
     fetchProducts()
@@ -45,7 +45,7 @@ const Home = () => {
       
       setAllProducts(productsWithMaxStock)
       
-      // Filtrar productos con stock menor al porcentaje definido
+      // Filtrar productos con stock menor al porcentaje definido (30%)
       const lowStock = productsWithMaxStock.filter(p => {
         const porcentaje = (p.cantidad / p.stock_maximo) * 100
         return porcentaje <= stockThreshold
@@ -105,19 +105,19 @@ const Home = () => {
   const getStockStatus = (product) => {
     const porcentaje = (product.cantidad / product.stock_maximo) * 100
     
-    if (porcentaje <= 20) {
+    if (porcentaje <= 30) {
       return { 
         estado: 'Crítico', 
         color: 'bg-red-100 text-red-700',
         icon: '🔴'
       }
-    } else if (porcentaje <= 40) {
+    } else if (porcentaje <= 50) {
       return { 
         estado: 'Bajo', 
         color: 'bg-yellow-100 text-yellow-700',
         icon: '🟡'
       }
-    } else if (porcentaje <= 60) {
+    } else if (porcentaje <= 70) {
       return { 
         estado: 'Moderado', 
         color: 'bg-orange-100 text-orange-700',
@@ -132,13 +132,13 @@ const Home = () => {
     }
   }
 
-  // Contar productos en estado crítico (menos del 20%)
+  // Contar productos en estado crítico (menos del 30%)
   const criticalCount = allProducts.filter(p => {
     const porcentaje = (p.cantidad / p.stock_maximo) * 100
-    return porcentaje <= 20
+    return porcentaje <= 30
   }).length
 
-  // Determinar si un producto está en bajo stock (menos del 20%)
+  // Determinar si un producto está en bajo stock (menos del 30%)
   const isLowStock = (product) => {
     const porcentaje = (product.cantidad / product.stock_maximo) * 100
     return porcentaje <= stockThreshold
@@ -179,7 +179,7 @@ const Home = () => {
             <div>
               <p className="text-sm text-gray-500 font-medium">🔴 Productos Críticos</p>
               <p className="text-2xl sm:text-3xl font-bold text-red-600">{criticalCount}</p>
-              <p className="text-xs text-gray-400 mt-1">Stock por debajo del 20%</p>
+              <p className="text-xs text-gray-400 mt-1">Stock por debajo del 30%</p>
             </div>
             <div className="bg-red-50 p-3 sm:p-4 rounded-xl">
               <Package className="w-8 h-8 sm:w-10 sm:h-10 text-red-500" />
@@ -237,7 +237,7 @@ const Home = () => {
             <p className="text-xs text-gray-500 mt-0.5">
               {isSearching 
                 ? `Mostrando resultados para "${searchTerm}"` 
-                : 'Productos con menos del 20% de stock disponible'}
+                : 'Productos con menos del 30% de stock disponible'}
             </p>
           </div>
           <div className="relative w-full sm:w-72">

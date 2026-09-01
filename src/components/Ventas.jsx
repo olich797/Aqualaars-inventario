@@ -13,7 +13,7 @@ const Ventas = () => {
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteCiNit, setClienteCiNit] = useState('')
   const [selectedProduct, setSelectedProduct] = useState('')
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState()
   const [metodoPago, setMetodoPago] = useState('efectivo')
   const [loading, setLoading] = useState(false)
   
@@ -366,27 +366,27 @@ const Ventas = () => {
         headStyles: { 
           fillColor: [0, 150, 200],
           textColor: [255, 255, 255],
-          fontSize: 10,
+          fontSize: 9,
           fontStyle: 'bold',
           halign: 'center',
-          cellPadding: 5
+          cellPadding: 3
         },
         styles: { 
-          fontSize: 9,
-          cellPadding: 5,
+          fontSize: 8,
+          cellPadding: 2,
           valign: 'middle'
         },
         columnStyles: {
-          0: { cellWidth: 70, halign: 'left' },
-          1: { cellWidth: 25, halign: 'center' },
-          2: { cellWidth: 45, halign: 'right' },
-          3: { cellWidth: 45, halign: 'right' }
+          0: { cellWidth: 'auto', halign: 'left' },  // ✅ Auto ajuste
+          1: { cellWidth: 20, halign: 'center' },
+          2: { cellWidth: 35, halign: 'right' },
+          3: { cellWidth: 35, halign: 'right' }
         },
         alternateRowStyles: {
           fillColor: [248, 252, 255]
         },
-        margin: { left: 20, right: 20 },
-        tableWidth: pageWidth - 40
+        margin: { left: 30, right: 30 }, // ✅ Más margen
+        tableWidth: 'auto', // ✅ Auto ajuste
       })
       
       // === TOTAL ===
@@ -471,7 +471,7 @@ const Ventas = () => {
               />
               <input
                 type="text"
-                placeholder="CI o NIT"
+                placeholder="CI NIT CEL"
                 value={clienteCiNit}
                 onChange={(e) => setClienteCiNit(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
@@ -538,6 +538,7 @@ const Ventas = () => {
                   onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
                   className="w-full sm:w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
                   min="1"
+                  placeholder="Cantidad"
                 />
                 <button
                   onClick={addToCart}
@@ -739,7 +740,7 @@ const Ventas = () => {
                 onClick={() => setShowQRModal(false)}
                 className="mt-4 px-6 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition duration-300 text-sm"
               >
-                Cerrar
+                Pagado
               </button>
             </div>
           </div>

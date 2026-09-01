@@ -13,8 +13,8 @@ const Proforma = () => {
   const [emissionDate, setEmissionDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [expirationDate, setExpirationDate] = useState(format(new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'))
   const [selectedProduct, setSelectedProduct] = useState('')
-  const [quantity, setQuantity] = useState(1)
-  const [manualProduct, setManualProduct] = useState({ nombre: '', marca: '', origen: '', precio: 0, cantidad: 1 })
+  const [quantity, setQuantity] = useState()
+  const [manualProduct, setManualProduct] = useState({ nombre: '', marca: '', origen: '', precio: '', cantidad: '' })
   const [exchangeRate, setExchangeRate] = useState(6.96)
   
   // Estados para el buscador con autocompletado
@@ -561,6 +561,7 @@ const Proforma = () => {
                 onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
                 className="w-full sm:w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
                 min="1"
+                placeholder="Cantidad"
               />
               <button
                 onClick={addFromInventory}
@@ -622,6 +623,7 @@ const Proforma = () => {
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
                 min="0.01"
                 step="0.01"
+                
               />
               <button
                 onClick={addManualProduct}
@@ -729,6 +731,7 @@ const Proforma = () => {
                       onChange={(e) => updateProductQuantity(product.id, parseInt(e.target.value) || 1)}
                       className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
                       min="1"
+                      placeholder="Cantidad"
                     />
                   </div>
                   <div>
@@ -739,7 +742,8 @@ const Proforma = () => {
                       onChange={(e) => updateProductPrice(product.id, parseFloat(e.target.value) || 0)}
                       className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
                       min="0.01"
-                      step="0.01"
+                      step="0.1"
+                      placeholder="Precio en Bs"
                     />
                   </div>
                   <div className="text-right">
