@@ -18,7 +18,7 @@ const Inventory = () => {
   })
   const [editingProducts, setEditingProducts] = useState({})
 
-  // ✅ Paginación
+  // Paginación
   const [currentPage, setCurrentPage] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
@@ -30,7 +30,7 @@ const Inventory = () => {
     'México', 'Paraguay', 'Perú', 'Uruguay', 'China', 'Japón', 'Taiwán', 'Italia'
   ]
 
-  // ✅ Opciones de categorías
+  // Opciones de categorías
   const categorias = [
     'Bombas',
     'Filtros',
@@ -39,6 +39,7 @@ const Inventory = () => {
     'Productos Químicos',
     'Iluminación',
     'Limpieza',
+    'Repuestos',
     'Tuberías',
     'Válvulas',
     'Otros'
@@ -329,7 +330,7 @@ const Inventory = () => {
     return pages
   }
 
-  // ✅ Obtener color de categoría
+  // Obtener color de categoría
   const getCategoriaColor = (categoria) => {
     const colores = {
       'Bombas': 'bg-blue-100 text-blue-700',
@@ -339,6 +340,7 @@ const Inventory = () => {
       'Productos Químicos': 'bg-red-100 text-red-700',
       'Iluminación': 'bg-indigo-100 text-indigo-700',
       'Limpieza': 'bg-teal-100 text-teal-700',
+      'Repuestos': 'bg-violet-100 text-violet-700',
       'Tuberías': 'bg-gray-100 text-gray-700',
       'Válvulas': 'bg-orange-100 text-orange-700',
       'Otros': 'bg-slate-100 text-slate-700'
@@ -410,7 +412,7 @@ const Inventory = () => {
               />
             </div>
 
-            {/* ✅ Categoría */}
+            {/* Categoría */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
                 Categoría
@@ -534,6 +536,7 @@ const Inventory = () => {
       ) : filteredProducts.length > 0 ? (
         <>
           <div className="bg-white rounded-xl shadow-md overflow-hidden inventory-table">
+            {/* Tabla Desktop */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
@@ -554,7 +557,22 @@ const Inventory = () => {
                     
                     return (
                       <tr key={product.id} className="border-t hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm text-gray-800">{product.nombre}</td>
+                        {/* ✅ Nombre - Ahora editable */}
+                        <td className="px-4 py-3 text-sm">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={editValues.nombre || ''}
+                              onChange={(e) => handleEditChange(product.id, 'nombre', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                              placeholder="Nombre"
+                            />
+                          ) : (
+                            <span className="text-gray-800">{product.nombre}</span>
+                          )}
+                        </td>
+                        
+                        {/* Categoría */}
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
                             <select
@@ -573,6 +591,8 @@ const Inventory = () => {
                             </span>
                           )}
                         </td>
+                        
+                        {/* Marca / Origen */}
                         <td className="px-4 py-3 text-sm">
                           {isEditing ? (
                             <div className="flex flex-col gap-1">
@@ -607,6 +627,8 @@ const Inventory = () => {
                             </div>
                           )}
                         </td>
+                        
+                        {/* Cantidad */}
                         <td className="px-4 py-3 text-right">
                           {isEditing ? (
                             <input
@@ -620,6 +642,8 @@ const Inventory = () => {
                             <span className="text-sm text-gray-800">{product.cantidad}</span>
                           )}
                         </td>
+                        
+                        {/* Precio USD */}
                         <td className="px-4 py-3 text-right">
                           {isEditing ? (
                             <input
@@ -634,17 +658,22 @@ const Inventory = () => {
                             <span className="text-sm text-gray-800">${product.precio_usd?.toFixed(2)}</span>
                           )}
                         </td>
+                        
+                        {/* Precio BOB */}
                         <td className="px-4 py-3 text-right">
                           <span className="text-sm text-gray-800">
                             Bs. {isEditing ? (editValues.precio_usd * exchangeRate).toFixed(2) : product.precio_bob?.toFixed(2)}
                           </span>
                         </td>
+                        
+                        {/* Acciones */}
                         <td className="px-4 py-3 text-center">
                           <div className="flex justify-center gap-2">
                             {isEditing ? (
                               <button
                                 onClick={() => {
                                   const updates = {
+                                    nombre: editValues.nombre,
                                     cantidad: editValues.cantidad,
                                     precio_usd: editValues.precio_usd,
                                     categoria: editValues.categoria || null,
@@ -695,7 +724,18 @@ const Inventory = () => {
                   <div key={product.id} className="p-4 hover:bg-gray-50 transition-colors">
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1 min-w-0 mr-2">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{product.nombre}</p>
+                        {/* ✅ Nombre editable en mobile */}
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editValues.nombre || ''}
+                            onChange={(e) => handleEditChange(product.id, 'nombre', e.target.value)}
+                            className="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                            placeholder="Nombre"
+                          />
+                        ) : (
+                          <p className="text-sm font-semibold text-gray-800 truncate">{product.nombre}</p>
+                        )}
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                           <span className={`px-2 py-0.5 text-[10px] rounded-full ${getCategoriaColor(product.categoria)}`}>
                             {product.categoria || 'Sin categoría'}
@@ -710,6 +750,7 @@ const Inventory = () => {
                           <button
                             onClick={() => {
                               const updates = {
+                                nombre: editValues.nombre,
                                 cantidad: editValues.cantidad,
                                 precio_usd: editValues.precio_usd,
                                 categoria: editValues.categoria || null,
